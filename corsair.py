@@ -2,8 +2,6 @@ WAVE_DURATION = 400
 PULSE_DELAY = 0.01
 ALARM_VOLUME = 1
 LANGUAGE = "en"
-WAKE_WORD = "jack"
-QUEUE_CHECK_DELAY = 0.5
 
 from cuesdk import CueSdk
 from gtts import gTTS 
@@ -16,7 +14,6 @@ import time
 import shutil
 import playsound
 
-recognizer = speech_recognition.Recognizer()
 sdk = CueSdk()
 
 def delete_contents(folder):
@@ -69,12 +66,14 @@ def say_text(message):
 
 
 def get_voice():
+    recognizer = speech_recognition.Recognizer()
     with speech_recognition.Microphone() as source:
         audio = recognizer.listen(source)
         try:
             return recognizer.recognize_google(audio)
-        except:
-            return "Please repeat"
+        except Exception as error_message:
+            if error_message:
+                print(f"VOICE ERROR: {error_message}")
 
 def watch_text(text_queue):
     while (True):
@@ -82,19 +81,9 @@ def watch_text(text_queue):
 
 def watch_voice(voice_queue):
     while (True):
-        voice_queue.put(get_voice().lower())
-
-def get_item_from_queue(queue):
-    return (queue.qsize() > 0) and queue.get()
-
-def check_queue(message):
-    text_str = get_item_from_queue(text_queue)
-    voice_str = get_item_from_queue(voice_queue)
-
-    if (text_str == message):
-        return (True)
-    elif (voice_str and WAKE_WORD in voice_str and WAKE_WORD in voice_str):
-        return (True)
+        voice_text = get_voice()
+        if voice_text:
+            voice_queue.put(voice_text.lower())
 
 def create_queue(callback):
     new_queue = queue.Queue()
@@ -110,17 +99,15 @@ def create_queue(callback):
 def stop_alarm():
     say_text("Stopping alarm...")
     pygame.mixer.stop()
-    os.system("useheadset")
-    say_text("Program stopped and must be restarted to run properly")
+    say_text("Alarm stopped and must be restarted to run properly. Awaiting voice command...")
 
 def start_alarm():
-    say_text("Starting alarm")
-    os.system("usespeakers")
+    say_text("Starting alarm...")
     play_sound("Alarm.mp3", ALARM_VOLUME, -1)
 
     if not sdk.connect():
         errorMessage = sdk.get_last_error()
-        say_text("Could not connect: %s" % errorMessage)
+        say_text("Could not connect to SDK: %s" % errorMessage)
         return
 
     device_count = sdk.get_device_count()  
@@ -132,11 +119,16 @@ def start_alarm():
         say_text("Could not retrieve colors")
         return
 
-    say_text("Alarm started")
+    say_text("Alarm started, awaiting voice command...")
+    text_queue.queue.clear()
+    voice_queue.queue.clear()
     while (True):
-        if check_queue("stop"):
+        latest_text = (text_queue.qsize() > 0) and text_queue.get().lower()
+        latest_voice = (voice_queue.qsize() > 0) and voice_queue.get().lower()
+
+        if (latest_text == "stop") or (latest_voice and "stop" in latest_voice):
             stop_alarm()
-            return
+            break
 
         perform_pulse_effect(WAVE_DURATION, colors)
         time.sleep(PULSE_DELAY)
@@ -149,12 +141,19 @@ def main():
     voice_queue = create_queue(watch_voice)
 
     pygame.mixer.init()
-    say_text("Program started, awaiting voice command")
+    os.system("usespeakers")
+    say_text("Program started, awaiting voice command...")
+
+    text_queue.queue.clear()
+    voice_queue.queue.clear()
     while (True):
-        if check_queue("start"):
+        latest_text = (text_queue.qsize() > 0) and text_queue.get().lower()
+        latest_voice = (voice_queue.qsize() > 0) and voice_queue.get().lower()
+
+        if (latest_text == "start") or (latest_voice and "start" in latest_voice):
             start_alarm()
-        elif check_queue("exit"):
-            return()
-        time.sleep(QUEUE_CHECK_DELAY)
+        elif (latest_text == "exit") or (latest_voice and "exit" in latest_voice):
+            say_text("Exiting program...")
+            break
 
 main()
