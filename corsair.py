@@ -2,6 +2,7 @@ WAVE_DURATION = 400
 PULSE_DELAY = 0.01
 ALARM_VOLUME = 1
 LANGUAGE = "en"
+CALL_WORD = "computer"
 
 from cuesdk import CueSdk
 from gtts import gTTS 
@@ -58,6 +59,7 @@ def play_sound(path, volume = 1, does_loop = 0):
 
 def say_text(message):
     print(message)
+
     audio = gTTS(text = message, lang = LANGUAGE, slow = False) 
     file_name = "TTS\\output_message.mp3"
     delete_contents("TTS")
@@ -69,11 +71,17 @@ def get_voice():
     recognizer = speech_recognition.Recognizer()
     with speech_recognition.Microphone() as source:
         audio = recognizer.listen(source)
+        voice_text = ""
+
         try:
-            return recognizer.recognize_google(audio)
+            voice_text = recognizer.recognize_google(audio) 
         except Exception as error_message:
             if error_message:
-                print(f"VOICE ERROR: {error_message}")
+                say_text("Please repeat")
+                if error_message:
+                    print(f"VOICE ERROR: {error_message}")
+
+        return voice_text
 
 def watch_text(text_queue):
     while (True):
@@ -82,7 +90,7 @@ def watch_text(text_queue):
 def watch_voice(voice_queue):
     while (True):
         voice_text = get_voice()
-        if voice_text:
+        if voice_text and CALL_WORD in voice_text.lower():
             voice_queue.put(voice_text.lower())
 
 def create_queue(callback):
@@ -126,7 +134,7 @@ def start_alarm():
         latest_text = (text_queue.qsize() > 0) and text_queue.get().lower()
         latest_voice = (voice_queue.qsize() > 0) and voice_queue.get().lower()
 
-        if (latest_text == "stop") or (latest_voice and "stop" in latest_voice):
+        if (latest_text == "stop alarm") or (latest_voice and "stop alarm" in latest_voice):
             stop_alarm()
             break
 
@@ -147,13 +155,13 @@ def main():
     text_queue.queue.clear()
     voice_queue.queue.clear()
     while (True):
-        latest_text = (text_queue.qsize() > 0) and text_queue.get().lower()
-        latest_voice = (voice_queue.qsize() > 0) and voice_queue.get().lower()
+        latest_text = (text_queue.qsize() > 0) and text_queue.get()
+        latest_voice = (voice_queue.qsize() > 0) and voice_queue.get()
 
-        if (latest_text == "start") or (latest_voice and "start" in latest_voice):
+        if (latest_text == "start alarm") or (latest_voice and "start alarm" in latest_voice):
             start_alarm()
-        elif (latest_text == "exit") or (latest_voice and "exit" in latest_voice):
-            say_text("Exiting program...")
+        elif (latest_text == "stop program") or (latest_voice and "stop program" in latest_voice):
+            say_text("Stopping program...")
             break
 
 main()
